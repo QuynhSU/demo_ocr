@@ -178,7 +178,8 @@ def eval_model(dataloader, model, loss_compute):
         # print(acc)
         # print(re)
         # print(y)
-    acc_char = np.mean(np.array(acc_char).astype(np.float32), axis=0)
+    # acc_char = np.mean(np.array(acc_char).astype(np.float32), axis=0)
+    acc_char = np.sum(np.array(acc_char))/len(dataloader.dataset)
     acc_sq = acc_sq/len(dataloader.dataset)
         # if i % 50 == 1:
         #     elapsed = time.time() - start
@@ -214,17 +215,13 @@ def train():
               SimpleLossCompute(model.generator, criterion, None))
         
         print("train_loss:", train_loss)
-        print("test_loss:", test_loss.item)
+        print("test_loss:", test_loss)
         print("acc_char:", acc_char)
         print("acc_seq:", acc_sq)
         if acc_sq > best_acc:
             best_acc = acc_sq
-            torch.save(model.state_dict(), '%08d_%f.pth'%(epoch, test_loss))
+            torch.save(model.state_dict(), 'weights/%08d_%f.pth'%(epoch, test_loss))
 
 if __name__=='__main__':
     train()
-
-
-
-
 
