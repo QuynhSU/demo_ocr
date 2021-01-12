@@ -11,7 +11,7 @@ import numpy as np
 from dataset import *
 import os
 # from predict import *
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 if torch.cuda.is_available():
     device = "cuda"
 else:
@@ -119,8 +119,9 @@ def eval_model(dataloader, model, loss_compute):
     total_tokens = 0
     total_loss = 0
     tokens = 0
-    acc = 0
-    for i, (imgs, labels_y, labels, y) in tqdm(enumerate(dataloader), total = len(dataloader)):
+    acc_sq = 0
+    acc_char = []
+    for i, (imgs, labels_y, labels, ground_truth) in tqdm(enumerate(dataloader), total = len(dataloader)):
         # print(imgs)
         batch = Batch(imgs.cuda(), labels_y.cuda(), labels.cuda())
         out = model(batch.imgs, batch.trg, batch.src_mask, batch.trg_mask)
@@ -131,21 +132,17 @@ def eval_model(dataloader, model, loss_compute):
         # img = torch.from_numpy(img).float().unsqueeze(0).cuda()
         memory = model.encode(imgs.cuda().float(), batch.src_mask)
         # print(memory[1,:,:])
-        src_mask=Variable(torch.from_numpy(np.ones([1, 1, 3], dtype=np.bool)).cuda())
+        src_mask=Variable(torch.from_numpy(np.ones([1, 1, 377], dtype=np.bool)).cuda())
         re = []
         for i, img in enumerate(memory):
             # memory = model.encode(imgs[i], batch.src_mask)
             ys = torch.ones(1, 1).fill_(1).long().cuda()
             for i in range(36 - 1):
-                out = model.decode(img, src_mask,
-                                   Variable(ys),
-                                   Variable(subsequent_mask(ys.size(1))
-                                            .long().cuda()))
+                out = model.decode(img, src_mask, Variable(ys), Variable(subsequent_mask(ys.size(1)).long().cuda()))
                 prob = model.generator(out[:, -1])
                 _, next_word = torch.max(prob, dim=1)
                 next_word = next_word.data[0]
-                ys = torch.cat([ys,
-                                torch.ones(1, 1).long().cuda().fill_(next_word)], dim=1)
+                ys = torch.cat([ys,torch.ones(1, 1).long().cuda().fill_(next_word)], dim=1)
                 if token2char[next_word.item()] == '>':
                     break
             ret = ys.cpu().numpy()[0]
@@ -155,29 +152,49 @@ def eval_model(dataloader, model, loss_compute):
             re.append(out)
             # pred = greedy_decode(img)
             # if out == y[i]:
-        re = torch.tensor(np.array(re)).cuda()
-        y = torch.tensor(np.array(y)).cuda()
-        acc+=np.sum(re==y)
+        re = np.array(re)
+        ground_truth = np.array(ground_truth)
+        acc_sq+=np.sum(re==ground_truth)
+
+        # accuracy = []
+        for index, label in enumerate(ground_truth):
+            # print("oaky")
+            prediction = re[index]
+            total_count = len(label)
+            correct_count = 0
+            # print("label: ", label)
+            # print("prediction: ", prediction)
+            for i, tmp in enumerate(prediction):
+                if tmp == prediction[i]:
+                    correct_count += 1
+
+            acc_char.append(correct_count / total_count)
+
+        
+
+        #Calculate acc char
+        
 
         # print(acc)
         # print(re)
         # print(y)
-    acc=acc/len(dataloader.dataset)
+    acc_char = np.mean(np.array(acc_char).astype(np.float32), axis=0)
+    acc_sq = acc_sq/len(dataloader.dataset)
         # if i % 50 == 1:
         #     elapsed = time.time() - start
         #     print("Epoch Step: %d Loss: %f Tokens per Sec: %f" %
         #             (i, loss / batch.ntokens, tokens / elapsed))
         #     start = time.time()
         #     tokens = 0
-    return total_loss / total_tokens, acc
+    return total_loss / total_tokens, acc_sq, acc_char
 
 
 
 
 def train():
-    batch_size = 128
-    train_dataloader = torch.utils.data.DataLoader(ListDataset('IC15/train/gt.txt'), batch_size=batch_size, shuffle=True, num_workers=0)
-    val_dataloader = torch.utils.data.DataLoader(ListDataset('IC15/test/gt.txt'), batch_size=batch_size, shuffle=False, num_workers=0)
+    batch_size = 50
+    train_dataloader = torch.utils.data.DataLoader(ListDataset('IC15/train/gt.txt', training=True), batch_size=batch_size, shuffle=True, num_workers=0)
+    val_dataloader = torch.utils.data.DataLoader(ListDataset('IC15/test/gt.txt', training=False), batch_size=batch_size, shuffle=False, num_workers=0)
     model = make_model(len(char2token))
     # model.load_state_dict(torch.load('checkpoint.pth'))
     model.cuda()
@@ -189,16 +206,19 @@ def train():
     for epoch in range(10000):
         print("epoch: ", epoch)
         model.train()
-        run_epoch(train_dataloader, model,
+        train_loss = run_epoch(train_dataloader, model,
               SimpleLossCompute(model.generator, criterion, model_opt))
 
         model.eval()
-        test_loss, test_acc = eval_model(val_dataloader, model,
+        test_loss, acc_sq, acc_char = eval_model(val_dataloader, model,
               SimpleLossCompute(model.generator, criterion, None))
-        print("test_loss", test_loss)
-        print("test_acc", test_acc)
-        if test_acc>best_acc:
-            best_acc = test_acc
+        
+        print("train_loss:", train_loss)
+        print("test_loss:", test_loss.item)
+        print("acc_char:", acc_char)
+        print("acc_seq:", acc_sq)
+        if acc_sq > best_acc:
+            best_acc = acc_sq
             torch.save(model.state_dict(), '%08d_%f.pth'%(epoch, test_loss))
 
 if __name__=='__main__':
