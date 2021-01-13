@@ -7,8 +7,8 @@ import cv2
 import numpy as np
 from torchvision import datasets, models, transforms
 from tqdm import tqdm
-
-label_len = 36
+from preprocessing import pre_process
+label_len = 30
 vocab =  "<,.+:-?$ 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ>"
 # start symbol <
 # end symbol >
@@ -30,7 +30,7 @@ def illegal(label):
 
 
 class ListDataset(Dataset):
-    def __init__(self, fname):
+    def __init__(self, fname, training=False):
         self.lines = []
         # if not isinstance(fname, list):
         #     fname = [fname]
@@ -41,6 +41,7 @@ class ListDataset(Dataset):
             # if not illegal(i.strip('\n').split(", ")[1].replace(" ", "").replace("\"", "")):
             #     print(i)
         self.lines += [i for i in lines if not illegal(i.strip('\n').split(", ")[1].replace(" ", "").replace("\"", "")) ]
+        self.training = training
         # print(self.lines)
     def __len__(self):
         return len(self.lines)
@@ -53,10 +54,20 @@ class ListDataset(Dataset):
         # print(line)
         img_path, label_y_str = line.strip('\n').split(', ')
         label_y_str= label_y_str.replace(" ", "").replace("\"", "")
-        img_path = os.path.join("IC15/train", img_path.replace("ï»¿",''))
-        img = cv2.imread(img_path) / 255.
+        if self.training:
+            img_path = os.path.join("IC15/train", img_path.replace("ï»¿",'').replace("\ufeff", ""))
+        else:
+            img_path = os.path.join("IC15/test", img_path.replace("ï»¿",'').replace("\ufeff", ""))
+        img = cv2.imread(img_path)
+        # print(img_path)
+        # print(type(img))
+        # if img is None:
+        #     return None
+        img = pre_process(img)
+        img = img / 255.
         # Channels-first
-        img= np.resize(img, (16, 48, 3))
+        # img= np.resize(img, (16, 48, 3))
+        
         # print(img.shape)
         img = np.transpose(img, (2, 0, 1))
         # As pytorch tensor
@@ -90,7 +101,7 @@ class Batch:
     "Object for holding a batch of data with mask during training."
     def __init__(self, imgs, trg_y, trg, pad=0):
         self.imgs = Variable(imgs.cuda().float(), requires_grad=False)
-        self.src_mask = Variable(torch.from_numpy(np.ones([imgs.size(0), 1, 3], dtype=np.bool)).cuda().float())
+        self.src_mask = Variable(torch.from_numpy(np.ones([imgs.size(0), 1, 377], dtype=np.bool)).cuda().float())
         if trg is not None:
             self.trg = Variable(trg.cuda().long(), requires_grad=False)
             self.trg_y = Variable(trg_y.cuda().long(), requires_grad=False)
