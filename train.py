@@ -121,6 +121,7 @@ def eval_model(dataloader, model, loss_compute):
     tokens = 0
     acc_sq = 0
     acc_char = []
+    count_char = 0
     for i, (imgs, labels_y, labels, ground_truth) in tqdm(enumerate(dataloader), total = len(dataloader)):
         # print(imgs)
         batch = Batch(imgs.cuda(), labels_y.cuda(), labels.cuda())
@@ -161,6 +162,7 @@ def eval_model(dataloader, model, loss_compute):
             # print("oaky")
             prediction = re[index]
             total_count = len(label)
+            count_char+=len(label)
             correct_count = 0
             # print("label: ", label)
             # print("prediction: ", prediction)
@@ -168,7 +170,7 @@ def eval_model(dataloader, model, loss_compute):
                 if tmp == prediction[i]:
                     correct_count += 1
 
-            acc_char.append(correct_count / total_count)
+            acc_char.append(correct_count)
 
         
 
@@ -179,7 +181,7 @@ def eval_model(dataloader, model, loss_compute):
         # print(re)
         # print(y)
     # acc_char = np.mean(np.array(acc_char).astype(np.float32), axis=0)
-    acc_char = np.sum(np.array(acc_char))/len(dataloader.dataset)
+    acc_char = np.sum(np.array(acc_char))/count_char
     acc_sq = acc_sq/len(dataloader.dataset)
         # if i % 50 == 1:
         #     elapsed = time.time() - start
@@ -197,12 +199,12 @@ def train():
     train_dataloader = torch.utils.data.DataLoader(ListDataset('IC15/train/gt.txt', training=True), batch_size=batch_size, shuffle=True, num_workers=0)
     val_dataloader = torch.utils.data.DataLoader(ListDataset('IC15/test/gt.txt', training=False), batch_size=batch_size, shuffle=False, num_workers=0)
     model = make_model(len(char2token))
-    # model.load_state_dict(torch.load('checkpoint.pth'))
+    model.load_state_dict(torch.load('/data/quynhpt/tranformer_ocr_vn/weights/00000272_1.145681.pth'))
     model.cuda()
     criterion = LabelSmoothing(size=len(char2token), padding_idx=0, smoothing=0.1)
     criterion.cuda()
     model_opt = NoamOpt(model.tgt_embed[0].d_model, 1, 2000,
-            torch.optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.98), eps=1e-4))
+            torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-4))
     best_acc=0
     for epoch in range(10000):
         print("epoch: ", epoch)
@@ -224,4 +226,8 @@ def train():
 
 if __name__=='__main__':
     train()
+
+
+
+
 
