@@ -6,29 +6,27 @@ from dataset import vocab, char2token, token2char
 from dataset import subsequent_mask
 import cv2
 import sys, os
+from  preprocessing import pre_process
 
 model = make_model(len(char2token))
-model.load_state_dict(torch.load('00000203_3.328263.pth'))
-model.cuda()
+model.load_state_dict(torch.load('/data/quynhpt/tranformer_ocr_vn/00000072_1.083349.pth'))
+# model.cuda()
 model.eval()
-src_mask=Variable(torch.from_numpy(np.ones([1, 1, 36], dtype=np.bool)).cuda())
+src_mask=Variable(torch.from_numpy(np.ones([1, 1, 377], dtype=np.bool)))
 SIZE=96
 
-def greedy_decode(src, max_len=36, start_symbol=1):
+def greedy_decode(src, max_len=30, start_symbol=1):
     global model
     global src_mask
     memory = model.encode(src, src_mask)
-    ys = torch.ones(1, 1).fill_(start_symbol).long().cuda()
+    ys = torch.ones(1, 1).fill_(start_symbol).long()
     for i in range(max_len-1):
-        out = model.decode(memory, src_mask, 
-                           Variable(ys), 
-                           Variable(subsequent_mask(ys.size(1))
-                                    .long().cuda()))
+        out = model.decode(memory, src_mask, Variable(ys), Variable(subsequent_mask(ys.size(1)).long()))
         prob = model.generator(out[:, -1])
         _, next_word = torch.max(prob, dim = 1)
         next_word = next_word.data[0]
         ys = torch.cat([ys, 
-                        torch.ones(1, 1).long().cuda().fill_(next_word)], dim=1)
+                        torch.ones(1, 1).long().fill_(next_word)], dim=1)
         if token2char[next_word.item()] == '>':
             break
     ret = ys.cpu().numpy()[0]
@@ -72,11 +70,12 @@ def do_folder(root):
         img_path = os.path.join("IC15/test", img_path.replace("ï»¿", ''))
         img = cv2.imread(img_path)
         # img = np.resize(img, (16, 48, 3))
-        img = resize(img)/ 255.
+        img = pre_process(img)/255
+        # img = resize(img)/ 255.
         img = np.transpose(img, (2, 0, 1))
-        img = torch.from_numpy(img).float().unsqueeze(0).cuda()
+        img = torch.from_numpy(img).float().unsqueeze(0)
         pred = greedy_decode(img)
-        if pred == label_y_str:
+        if pred != label_y_str:
             hit += 1
             print('imp:', img_path, 'label:', label_y_str, 'pred:', pred, hit, all, hit/all)
         # else:
@@ -85,17 +84,7 @@ def do_folder(root):
 
 
 if __name__ == '__main__':
-    do_folder('IC15\\test\gt.txt')
-
-
-
-
-
-
-
-
-
-
+    do_folder('IC15/test/gt.txt')
 
 
 
