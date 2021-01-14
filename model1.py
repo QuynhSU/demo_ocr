@@ -277,5 +277,3 @@ def make_model(tgt_vocab, N=1, d_model=128, d_ff=256, d_feature=32768, h=8, drop
             nn.init.xavier_uniform(p)
     return model
 
-
-
